@@ -1,0 +1,84 @@
+// Human-readable output: a terminal table and a Markdown report.
+
+const LEVEL_LABEL = {
+  imported: 'imported by your code',
+  'via-imported': 'pulled in by an imported dependency',
+  'test-only': 'test code only',
+  'not-imported': 'not imported',
+};
+
+function upgradeText(f) {
+  if (!f.fix.target) return 'no fixed version published';
+  return `${f.version} -> ${f.fix.target}${f.fix.crossesMajor ? ' (major upgrade)' : ''}${f.direct ? '' : ' (override)'}`;
+}
+
+export function formatTable(result) {
+  const lines = [];
+  const s = result.summary;
+  lines.push(`${result.project}: ${result.packagesScanned} packages scanned, ${result.findings.length} vulnerable (P1: ${s.P1}, P2: ${s.P2}, P3: ${s.P3})`);
+  if (!result.findings.length) {
+    lines.push('No known vulnerabilities in the installed versions.');
+    return lines.join('\n');
+  }
+  lines.push('');
+  for (const f of result.findings) {
+    lines.push(`[${f.priority}] ${f.package}@${f.version}  ${f.severity.toUpperCase()}, ${f.advisories.length} advisor${f.advisories.length === 1 ? 'y' : 'ies'}`);
+    lines.push(`     reachability: ${LEVEL_LABEL[f.reachability]}${f.evidence.length ? ` (${f.evidence.slice(0, 2).join(', ')})` : ''}`);
+    if (!f.direct && f.via.length) lines.push(`     dependency of: ${f.via.join(', ')}`);
+    lines.push(`     fix: ${upgradeText(f)}`);
+    for (const a of f.advisories.slice(0, 3)) lines.push(`       - ${a.ghsa} ${a.severity}: ${a.title}`);
+    if (f.advisories.length > 3) lines.push(`       - ...and ${f.advisories.length - 3} more`);
+  }
+  return lines.join('\n');
+}
+
+// node --test / TAP: "# pass 5" and "# fail 1" totals, and the names of failing tests.
+function summarizeTap(output = '') {
+  const pass = /^# pass (\d+)/m.exec(output);
+  const fail = /^# fail (\d+)/m.exec(output);
+  return pass && fail ? `, ${pass[1]} passed / ${fail[1]} failed` : '';
+}
+function failingTests(output = '') {
+  return [...output.matchAll(/^not ok \d+ - (.+)$/gm)].map((m) => m[1].trim());
+}
+
+export function formatMarkdown(before, after, extras = {}) {
+  const row = (f) =>
+    `| ${f.priority} | \`${f.package}@${f.version}\` | ${f.severity} | ${f.advisories.length} | ${LEVEL_LABEL[f.reachability]} | ${upgradeText(f)} |`;
+  const table = (r) =>
+    r.findings.length
+      ? ['| Priority | Package | Severity | Advisories | Reachability | Fix |', '|---|---|---|---|---|---|', ...r.findings.map(row)].join('\n')
+      : '_No known vulnerabilities in the installed versions._';
+  const out = [
+    `# Remediation evidence: ${before.project}`,
+    '',
+    `Generated ${new Date().toISOString()} by sca-triage. Advisory data: GitHub Advisory Database via the npm registry.`,
+    '',
+    '## Before',
+    `${before.findings.length} vulnerable packages (P1: ${before.summary.P1}, P2: ${before.summary.P2}, P3: ${before.summary.P3}).`,
+    '',
+    table(before),
+  ];
+  if (extras.changes?.length) {
+    out.push('', '## Changes applied', '', ...extras.changes.map((c) => `- \`${c}\``));
+  }
+  if (extras.tests) {
+    const line = (t) => `**${t.passed ? 'passed' : 'FAILED'}** (exit code ${t.code})`;
+    out.push('', '## Project tests (`npm test`)', '', '| Run | Result | Output |', '|---|---|---|');
+    if (extras.testsBefore) out.push(`| Before upgrade | ${line(extras.testsBefore)}${summarizeTap(extras.testsBefore.output)} | \`tests.before.txt\` |`);
+    out.push(`| After upgrade | ${line(extras.tests)}${summarizeTap(extras.tests.output)} | \`tests.after.txt\` |`);
+    const failedBefore = failingTests(extras.testsBefore?.output);
+    if (failedBefore.length) out.push('', 'Failing before the upgrade:', '', ...failedBefore.map((n) => `- ${n}`));
+  }
+  if (after) {
+    out.push('', '## After', `${after.findings.length} vulnerable packages (P1: ${after.summary.P1}, P2: ${after.summary.P2}, P3: ${after.summary.P3}).`, '', table(after));
+  }
+  out.push(
+    '',
+    '## Limits',
+    '',
+    '- Reachability is import-level: "imported" means the code loads the package, not that the vulnerable function is proven to run.',
+    '- Results reflect the advisory database at scan time. Zero findings is not a security certification.',
+  );
+  return out.join('\n') + '\n';
+}

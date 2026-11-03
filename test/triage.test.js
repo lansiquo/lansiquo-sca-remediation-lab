@@ -1,0 +1,106 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+import { loadProject } from '../src/lockfile.js';
+import { findImports, classify, packageNameFromSpecifier } from '../src/reachability.js';
+import { triage, pickSafeVersion, priorityFor, gateFails } from '../src/triage.js';
+import { planFixes } from '../src/fix.js';
+
+const FIXTURE = fileURLToPath(new URL('./fixtures/project', import.meta.url));
+
+// Offline stand-ins for the npm registry.
+const ADVISORIES = {
+  parser: [
+    { ghsa: 'GHSA-test-0001', title: 'Parser prototype pollution', severity: 'high', vulnerableVersions: '<1.0.3', url: 'x', cwe: [], cvss: 7.5 },
+  ],
+  'test-lib': [
+    { ghsa: 'GHSA-test-0002', title: 'Test lib ReDoS', severity: 'critical', vulnerableVersions: '<3.1.0', url: 'x', cwe: [], cvss: 9.1 },
+  ],
+  'unused-lib': [
+    { ghsa: 'GHSA-test-0003', title: 'Unused lib issue', severity: 'moderate', vulnerableVersions: '<1.0.1', url: 'x', cwe: [], cvss: 5 },
+  ],
+};
+const VERSIONS = {
+  parser: ['0.9.1', '1.0.0', '1.0.1', '1.0.3', '1.1.0', '2.0.0-beta.1', '2.0.0'],
+  'test-lib': ['3.0.0', '3.1.0', '4.0.0'],
+  'unused-lib': ['1.0.0', '1.0.1'],
+  'web-lib': ['2.0.0'],
+};
+const lookups = {
+  advisoryLookup: async () => ADVISORIES,
+  versionLookup: async (name) => VERSIONS[name] || [],
+};
+
+test('extracts package names from import specifiers', () => {
+  assert.equal(packageNameFromSpecifier('lodash/merge'), 'lodash');
+  assert.equal(packageNameFromSpecifier('@scope/pkg/sub'), '@scope/pkg');
+  assert.equal(packageNameFromSpecifier('./local'), null);
+  assert.equal(packageNameFromSpecifier('node:fs'), null);
+});
+
+test('builds the dependency graph from the lockfile', () => {
+  const p = loadProject(FIXTURE);
+  const hoisted = p.installs.find((i) => i.path === 'node_modules/parser');
+  const nested = p.installs.find((i) => i.path === 'node_modules/unused-lib/node_modules/parser');
+  assert.deepEqual(hoisted.via, ['web-lib']);
+  assert.deepEqual(nested.via, ['unused-lib']);
+  assert.equal(hoisted.direct, false);
+});
+
+test('classifies reachability from real import statements', () => {
+  const p = loadProject(FIXTURE);
+  const imports = findImports(FIXTURE);
+  const level = (path) => classify(p.installs.find((i) => i.path === path), imports).level;
+  assert.equal(level('node_modules/web-lib'), 'imported');
+  assert.equal(level('node_modules/parser'), 'via-imported');
+  assert.equal(level('node_modules/unused-lib'), 'not-imported');
+  assert.equal(level('node_modules/unused-lib/node_modules/parser'), 'not-imported');
+  assert.equal(level('node_modules/test-lib'), 'test-only');
+});
+
+test('priority combines severity with reachability', () => {
+  assert.equal(priorityFor('critical', 'imported'), 'P1');
+  assert.equal(priorityFor('high', 'via-imported'), 'P1');
+  assert.equal(priorityFor('critical', 'not-imported'), 'P2');
+  assert.equal(priorityFor('moderate', 'imported'), 'P2');
+  assert.equal(priorityFor('moderate', 'test-only'), 'P3');
+});
+
+test('picks the smallest safe version, preferring the same major', () => {
+  const adv = [{ vulnerableVersions: '<1.0.3' }];
+  assert.deepEqual(pickSafeVersion('1.0.0', VERSIONS.parser, adv), { target: '1.0.3', crossesMajor: false });
+  // Skips prereleases, and crosses a major only when it has to.
+  assert.deepEqual(pickSafeVersion('1.0.0', ['1.0.1', '2.0.0-rc.1', '2.0.0'], [{ vulnerableVersions: '<2.0.0' }]), { target: '2.0.0', crossesMajor: true });
+  // A newer version that a *different* advisory covers is not "safe".
+  assert.deepEqual(
+    pickSafeVersion('1.0.0', ['1.0.1', '1.0.2'], [{ vulnerableVersions: '<1.0.1' }, { vulnerableVersions: '=1.0.1' }]),
+    { target: '1.0.2', crossesMajor: false },
+  );
+  assert.deepEqual(pickSafeVersion('1.0.0', ['1.0.0'], adv), { target: null, crossesMajor: false });
+});
+
+test('triage ranks findings and the gate fails only on P1 by default', async () => {
+  const r = await triage(FIXTURE, lookups);
+  const summary = r.findings.map((f) => `${f.priority} ${f.package}@${f.version} ${f.reachability}`);
+  assert.deepEqual(summary, [
+    'P1 parser@1.0.0 via-imported',
+    'P2 test-lib@3.0.0 test-only', // critical, but never loaded at runtime
+    'P2 parser@0.9.1 not-imported', // high, in a copy nothing loads
+    'P3 unused-lib@1.0.0 not-imported',
+  ]);
+  assert.equal(gateFails(r, 'P1'), true);
+  assert.equal(gateFails({ findings: r.findings.filter((f) => f.priority !== 'P1') }, 'P1'), false);
+  assert.equal(gateFails(r, 'none'), false);
+});
+
+test('fix plan pins direct deps and overrides transitive ones with one target', async () => {
+  const r = await triage(FIXTURE, lookups);
+  const plan = planFixes(r);
+  const byName = Object.fromEntries(plan.actions.map((a) => [a.package, a]));
+  assert.equal(byName.parser.direct, false); // transitive -> npm overrides
+  assert.equal(byName.parser.target, '1.0.3'); // highest target across both copies
+  assert.equal(byName['test-lib'].direct, true);
+  assert.equal(byName['test-lib'].dev, true);
+  assert.equal(byName['test-lib'].target, '3.1.0');
+  assert.deepEqual(planFixes(r, { minPriority: 'P1' }).actions.map((a) => a.package), ['parser']);
+});
