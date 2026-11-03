@@ -1,0 +1,27 @@
+name: sca-triage
+description: Fail the build on npm dependency vulnerabilities your code actually loads, ranked by severity and import-level reachability.
+branding:
+  icon: shield
+  color: red
+inputs:
+  path:
+    description: Directory containing package.json and package-lock.json
+    default: .
+  fail-on:
+    description: Lowest priority that fails the build (P1, P2, P3 or none)
+    default: P1
+runs:
+  using: composite
+  steps:
+    - name: Scan dependencies
+      shell: bash
+      env:
+        SCA_PATH: ${{ inputs.path }}
+        SCA_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set +e
+        node "$GITHUB_ACTION_PATH/bin/sca-triage.js" scan "$SCA_PATH" --fail-on "$SCA_FAIL_ON" --markdown "$RUNNER_TEMP/sca-triage.md"
+        code=$?
+        set -e
+        [ -f "$RUNNER_TEMP/sca-triage.md" ] && cat "$RUNNER_TEMP/sca-triage.md" >> "$GITHUB_STEP_SUMMARY"
+        exit $code
