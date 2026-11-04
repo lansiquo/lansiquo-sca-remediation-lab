@@ -1,0 +1,23 @@
+{
+  "name": "sca-triage",
+  "version": "0.1.0",
+  "description": "Rank npm dependency vulnerabilities by whether your code loads them, apply the smallest safe upgrades, and prove them with your tests. Ships with an INTENTIONALLY VULNERABLE demo app in lab/.",
+  "type": "module",
+  "bin": {
+    "sca-triage": "bin/sca-triage.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lab:install": "npm ci --prefix lab/vulnerable-app --ignore-scripts --no-audit --no-fund",
+    "lab:scan": "node bin/sca-triage.js scan lab/vulnerable-app",
+    "lab:plan": "node bin/sca-triage.js fix lab/vulnerable-app"
+  },
+  "keywords": ["sca", "security", "npm", "vulnerability", "reachability", "supply-chain"]
+}
