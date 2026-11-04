@@ -1,5 +1,14 @@
 # SCA Remediation Lab · `sca-triage`
 
+**Status: functional end-to-end local tool and lab.**
+
+The implemented workflow scans npm dependencies, prioritizes findings using import evidence,
+applies proposed upgrades, runs the project’s tests, rescans and saves remediation evidence.
+The [CI lab gate](.github/workflows/ci.yml) exercises the vulnerable baseline and remediated copy.
+Functional describes this local/CI workflow; the [scope and limits](#limits) still apply.
+The [portfolio browser demo](https://dotrobin.dev/demos/sca.html) is a recorded replay, separate
+from the working CLI and GitHub Action.
+
 > [!WARNING]
 > **This repository contains an intentionally vulnerable application.**
 > [`lab/vulnerable-app`](lab/vulnerable-app) pins known-vulnerable versions of `minimist`,
