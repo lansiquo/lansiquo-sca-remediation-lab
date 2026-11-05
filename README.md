@@ -1,6 +1,11 @@
 # sca-triage
 
-**Status: functional end-to-end npm SCA scanner and lab.**
+`sca-triage` is a dependency-free npm SCA scanner, run from the command line or as a GitHub Action. It finds
+known vulnerabilities in your installed dependency tree, **ranks them by whether your code
+actually loads the vulnerable package**, applies the smallest safe upgrade, and proves the result
+with your own tests, with an evidence folder you can hand to an auditor.
+
+**Status: v1.0, functional end-to-end npm SCA scanner and lab.**
 Its SAST companion, [sast-triage](https://github.com/lansiquo/sast-triage), reviews pull requests with Semgrep, labels each finding new or pre-existing, and ranks it P1–P3 the same way.
 
 The implemented workflow scans npm dependencies, prioritizes findings using import evidence,
@@ -17,11 +22,6 @@ from the working CLI and GitHub Action.
 > Use it locally for learning only. Don't deploy it, don't expose it to a network, and don't
 > copy its dependency versions into real projects. Dependabot alerts on this repository are expected.
 > The `sca-triage` scanner itself (`bin/` and `src/`) has no dependencies and is safe to use.
-
-`sca-triage` is a dependency-free npm SCA scanner, run from the command line or as a GitHub Action. It finds
-known vulnerabilities in your installed dependency tree, **ranks them by whether your code
-actually loads the vulnerable package**, applies the smallest safe upgrade, and proves the result
-with your own tests, with an evidence folder you can hand to an auditor.
 
 ## Why
 
