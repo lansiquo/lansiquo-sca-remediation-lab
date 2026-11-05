@@ -1,6 +1,6 @@
 {
   "name": "sca-triage",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "npm SCA scanner: rank dependency vulnerabilities by whether your code loads them, apply the smallest safe upgrades, and prove them with your project's tests. Ships with an INTENTIONALLY VULNERABLE demo app in lab/.",
   "type": "module",
   "bin": {
