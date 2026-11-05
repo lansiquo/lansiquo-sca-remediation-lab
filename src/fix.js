@@ -48,7 +48,9 @@ export async function applyFixes(projectDir, { minPriority = 'P3', evidenceDir, 
   const lockPath = join(projectDir, 'package-lock.json');
   const lockBefore = readFileSync(lockPath, 'utf8');
   const scripts = JSON.parse(readFileSync(pkgPath, 'utf8')).scripts || {};
-  const testsEnabled = runTests && Boolean(scripts.test);
+  // If the tests can't run, record why, so the output can flag the upgrade as unverified.
+  const testsSkipped = !runTests ? 'disabled with --no-tests' : !scripts.test ? 'no "test" script in package.json' : null;
+  const testsEnabled = !testsSkipped;
   const runProjectTests = () => {
     const r = run(NPM, ['test'], projectDir);
     return { command: 'npm test', code: r.code, passed: r.code === 0, output: r.output };
@@ -94,8 +96,8 @@ export async function applyFixes(projectDir, { minPriority = 'P3', evidenceDir, 
     if (tests) writeFileSync(join(evidenceDir, 'tests.after.txt'), tests.output);
     const sbom = run(NPM, ['sbom', '--sbom-format', 'cyclonedx'], projectDir);
     if (sbom.code === 0) writeFileSync(join(evidenceDir, 'sbom.cdx.json'), sbom.output);
-    writeFileSync(join(evidenceDir, 'REPORT.md'), formatMarkdown(before, after, { changes, tests, testsBefore }));
+    writeFileSync(join(evidenceDir, 'REPORT.md'), formatMarkdown(before, after, { changes, tests, testsBefore, testsSkipped }));
   }
 
-  return { before, after, plan, changes, tests, testsBefore, evidenceWritten: Boolean(evidenceDir && existsSync(evidenceDir)) };
+  return { before, after, plan, changes, tests, testsBefore, testsSkipped, evidenceWritten: Boolean(evidenceDir && existsSync(evidenceDir)) };
 }

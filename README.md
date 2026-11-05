@@ -139,6 +139,8 @@ sca-triage fix  [dir] [--apply] [--min-priority P1|P2|P3] [--evidence <dir>] [--
   5. writes `REPORT.md`, `before.json`, `after.json`, both lockfiles, both test logs and a CycloneDX SBOM to the evidence folder.
 
   It exits with code 1 if the tests fail after the upgrade, so you know not to merge it.
+  If the tests can't run (no `test` script, or `--no-tests`), it still exits 0, but the output
+  and `REPORT.md` mark the changes as **unverified**.
 
 ### Priorities
 
