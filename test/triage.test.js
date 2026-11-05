@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { loadProject } from '../src/lockfile.js';
 import { findImports, classify, packageNameFromSpecifier } from '../src/reachability.js';
 import { triage, pickSafeVersion, priorityFor, gateFails } from '../src/triage.js';
-import { planFixes } from '../src/fix.js';
+import { planFixes, applyFixes } from '../src/fix.js';
+import { formatMarkdown } from '../src/report.js';
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/project', import.meta.url));
 
@@ -103,4 +104,24 @@ test('fix plan pins direct deps and overrides transitive ones with one target', 
   assert.equal(byName['test-lib'].dev, true);
   assert.equal(byName['test-lib'].target, '3.1.0');
   assert.deepEqual(planFixes(r, { minPriority: 'P1' }).actions.map((a) => a.package), ['parser']);
+});
+
+test('fix records why the project tests did not run', async () => {
+  // No advisories means nothing to upgrade, and no evidenceDir means nothing is written,
+  // so applyFixes runs no npm commands here. The fixture has no "test" script.
+  const nothingToFix = { advisoryLookup: async () => ({}), versionLookup: async () => [] };
+  const r = await applyFixes(FIXTURE, { lookups: nothingToFix });
+  assert.equal(r.tests, null);
+  assert.equal(r.testsSkipped, 'no "test" script in package.json');
+  const noTests = await applyFixes(FIXTURE, { lookups: nothingToFix, runTests: false });
+  assert.equal(noTests.testsSkipped, 'disabled with --no-tests');
+});
+
+test('fix report says the changes are unverified when tests did not run', async () => {
+  const r = await triage(FIXTURE, lookups);
+  const md = formatMarkdown(r, r, { changes: ['npm install test-lib@3.1.0'], tests: null, testsSkipped: 'disabled with --no-tests' });
+  assert.match(md, /## Project tests/);
+  assert.match(md, /Not run — changes applied but UNVERIFIED\*\* \(disabled with --no-tests\)/);
+  // A scan report (no "after") has no tests section.
+  assert.doesNotMatch(formatMarkdown(r, null), /## Project tests/);
 });

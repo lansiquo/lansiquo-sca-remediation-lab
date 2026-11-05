@@ -1,6 +1,7 @@
-# SCA Remediation Lab · `sca-triage`
+# sca-triage
 
-**Status: functional end-to-end local tool and lab.**
+**Status: functional end-to-end npm SCA scanner and lab.**
+Its SAST companion, [sast-triage](https://github.com/lansiquo/Pull-Request-Reviewer), reviews pull requests with Semgrep and is in development.
 
 The implemented workflow scans npm dependencies, prioritizes findings using import evidence,
 applies proposed upgrades, runs the project’s tests, rescans and saves remediation evidence.
@@ -15,9 +16,9 @@ from the working CLI and GitHub Action.
 > `axios`, `semver` and `tar` on purpose, so the tool has something real to find and fix.
 > Use it locally for learning only. Don't deploy it, don't expose it to a network, and don't
 > copy its dependency versions into real projects. Dependabot alerts on this repository are expected.
-> The `sca-triage` tool itself (`bin/` and `src/`) has no dependencies and is safe to use.
+> The `sca-triage` scanner itself (`bin/` and `src/`) has no dependencies and is safe to use.
 
-`sca-triage` is a dependency-free command-line tool and GitHub Action for npm projects. It finds
+`sca-triage` is a dependency-free npm SCA scanner, run from the command line or as a GitHub Action. It finds
 known vulnerabilities in your installed dependency tree, **ranks them by whether your code
 actually loads the vulnerable package**, applies the smallest safe upgrade, and proves the result
 with your own tests, with an evidence folder you can hand to an auditor.
@@ -99,6 +100,30 @@ demonstrates end to end (minimist, GHSA-xvch-5gv4-984h).
 
 Exact counts and fix versions depend on the advisory database on the day you run it.
 
+## What it found on a real project (OWASP NodeGoat)
+
+To see it work at scale on a real dependency tree, I ran it against
+[OWASP NodeGoat](https://github.com/OWASP/NodeGoat), a well-known deliberately vulnerable training app:
+
+```text
+owasp-nodejs-goat: 1,479 packages scanned, 180 vulnerable
+437 advisories  ->  P1: 13   P2: 123   P3: 44
+```
+
+437 advisories across 180 packages is exactly the alert-fatigue problem. Reachability ranking narrows
+"fix now" to **13 P1 packages** — the ones that are both severe and actually loaded. A few:
+
+| Priority | Package | Severity | Why |
+|---|---|---|---|
+| P1 | `underscore@1.9.1` | critical | imported by the app's code |
+| P1 | `marked@0.3.5` | high | imported by the app's code (only a major upgrade fixes it, flagged) |
+| P1 | `bson@1.0.9` | critical | pulled in through `mongodb`, which the app imports |
+| P2 | `form-data@2.3.3` | critical | **nothing imports it**, so it ranks below the reachable highs |
+
+That `form-data` row is the whole point: a critical advisory that isn't the first thing to fix, because
+the code never loads it. Advisory data is the GitHub Advisory Database via the npm registry, so exact
+counts move as the database changes.
+
 ## Commands
 
 ```text
@@ -115,6 +140,8 @@ sca-triage fix  [dir] [--apply] [--min-priority P1|P2|P3] [--evidence <dir>] [--
   5. writes `REPORT.md`, `before.json`, `after.json`, both lockfiles, both test logs and a CycloneDX SBOM to the evidence folder.
 
   It exits with code 1 if the tests fail after the upgrade, so you know not to merge it.
+  If the tests can't run (no `test` script, or `--no-tests`), it still exits 0, but the output
+  and `REPORT.md` mark the changes as **unverified**.
 
 ### Priorities
 
@@ -145,6 +172,17 @@ The findings table is added to the job summary. This repository's own [CI](.gith
 runs the tool against the lab app on every push: the gate must **fail** on the vulnerable
 baseline and **pass** after remediation, and the evidence folder is uploaded as an artifact.
 
+## Why I built it this way
+
+I kept running `npm audit` on projects and getting a wall of advisories with no sense of which ones
+mattered, so the choice was fix everything (and break things) or ignore everything. The one question
+that actually changed my decision was "does our code even load this?" — so that became the core of the
+tool. The reachability check is deliberately simple: it looks for imports, not a call graph. I'd rather
+ship an honest "lower priority" signal than a clever one that quietly lies, so reachability only
+down-ranks findings, it never hides them. Keeping the tool dependency-free was a principle too — a thing
+that scans dependencies shouldn't drag in its own. The parts I'd tackle next are an OSV data source for
+other ecosystems and EPSS/KEV scoring so the ranking knows what's actually being exploited in the wild.
+
 ## Limits
 
 - **Reachability is import-level.** "Imported" means your code loads the package, not that the
@@ -152,8 +190,37 @@ baseline and **pass** after remediation, and the evidence folder is uploaded as 
   "lower priority", not "safe".
 - **npm only,** using `package-lock.json` v2 or v3. Other ecosystems aren't supported yet.
 - **Results reflect the advisory database at scan time.** Zero findings is not a security certification.
-- **Major upgrades are applied when no same-major fix exists,** and flagged. Your tests are the
-  safety net, so the tool's verdict is only as good as your test suite.
+- **Major upgrades are applied when no same-major fix exists,** and flagged. The scanned project's
+  own tests (`npm test`) are the safety net, so the verdict on an upgrade is only as good as that
+  project's test suite. If it has no tests, the upgrade is reported as unverified.
+
+## Architecture
+
+```text
+bin/sca-triage.js
+      |
+      v
+src/triage.js ------> src/lockfile.js
+      |               src/advisories.js
+      |               src/reachability.js
+      |               src/semver.js
+      v
+ranked findings (P1 / P2 / P3)
+      |
+      +------> src/fix.js       (fix --apply)
+      '------> src/report.js
+```
+
+`fix --apply` calls `triage.js` twice (before and after the upgrade) and uses `report.js` to write `REPORT.md`.
+
+- `bin/sca-triage.js` reads the command and flags, calls the modules below, prints the result and sets the exit code.
+- `src/triage.js` checks each installed package against its advisories, assigns P1/P2/P3 and picks the smallest safe upgrade.
+- `src/lockfile.js` reads `package.json` and `package-lock.json` into a list of installed packages and who depends on each.
+- `src/advisories.js` asks the npm registry for known advisories and published versions.
+- `src/reachability.js` finds the packages your source files `require` or `import`.
+- `src/semver.js` compares versions and matches the version ranges advisories use.
+- `src/fix.js` applies the upgrades with npm, runs your tests, rescans and writes the evidence folder.
+- `src/report.js` formats results as the terminal table and the Markdown report.
 
 ## Layout
 

@@ -69,6 +69,9 @@ export function formatMarkdown(before, after, extras = {}) {
     out.push(`| After upgrade | ${line(extras.tests)}${summarizeTap(extras.tests.output)} | \`tests.after.txt\` |`);
     const failedBefore = failingTests(extras.testsBefore?.output);
     if (failedBefore.length) out.push('', 'Failing before the upgrade:', '', ...failedBefore.map((n) => `- ${n}`));
+  } else if (after) {
+    // A fix report always says whether the tests checked the upgrade. Scan reports (no "after") skip this.
+    out.push('', '## Project tests (`npm test`)', '', `**Not run — changes applied but UNVERIFIED** (${extras.testsSkipped || 'reason not recorded'}).`);
   }
   if (after) {
     out.push('', '## After', `${after.findings.length} vulnerable packages (P1: ${after.summary.P1}, P2: ${after.summary.P2}, P3: ${after.summary.P3}).`, '', table(after));

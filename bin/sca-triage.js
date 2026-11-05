@@ -77,6 +77,7 @@ async function main() {
     const r = await applyFixes(dir, { minPriority, evidenceDir, runTests: !opts.noTests });
     process.stdout.write(`Applied ${r.changes.length} change(s):\n${r.changes.map((c) => `  ${c}`).join('\n')}\n`);
     if (r.tests) process.stdout.write(`Tests (npm test): ${r.tests.passed ? 'passed' : 'FAILED'}\n`);
+    else process.stdout.write(`Tests: not run — changes applied but UNVERIFIED (${r.testsSkipped})\n`);
     process.stdout.write(`After: ${r.after.findings.length} vulnerable packages (P1: ${r.after.summary.P1}, P2: ${r.after.summary.P2}, P3: ${r.after.summary.P3})\n`);
     process.stdout.write(`Evidence: ${evidenceDir}\n`);
     return r.tests && !r.tests.passed ? 1 : 0;
