@@ -99,6 +99,30 @@ demonstrates end to end (minimist, GHSA-xvch-5gv4-984h).
 
 Exact counts and fix versions depend on the advisory database on the day you run it.
 
+## What it found on a real project (OWASP NodeGoat)
+
+To see it work at scale on a real dependency tree, I ran it against
+[OWASP NodeGoat](https://github.com/OWASP/NodeGoat), a well-known deliberately vulnerable training app:
+
+```text
+owasp-nodejs-goat: 1,479 packages scanned, 180 vulnerable
+437 advisories  ->  P1: 13   P2: 123   P3: 44
+```
+
+437 advisories across 180 packages is exactly the alert-fatigue problem. Reachability ranking narrows
+"fix now" to **13 P1 packages** — the ones that are both severe and actually loaded. A few:
+
+| Priority | Package | Severity | Why |
+|---|---|---|---|
+| P1 | `underscore@1.9.1` | critical | imported by the app's code |
+| P1 | `marked@0.3.5` | high | imported by the app's code (only a major upgrade fixes it, flagged) |
+| P1 | `bson@1.0.9` | critical | pulled in through `mongodb`, which the app imports |
+| P2 | `form-data@2.3.3` | critical | **nothing imports it**, so it ranks below the reachable highs |
+
+That `form-data` row is the whole point: a critical advisory that isn't the first thing to fix, because
+the code never loads it. Advisory data is the GitHub Advisory Database via the npm registry, so exact
+counts move as the database changes.
+
 ## Commands
 
 ```text
@@ -144,6 +168,17 @@ Reachability levels: `imported` (your runtime code requires or imports it), `via
 The findings table is added to the job summary. This repository's own [CI](.github/workflows/ci.yml)
 runs the tool against the lab app on every push: the gate must **fail** on the vulnerable
 baseline and **pass** after remediation, and the evidence folder is uploaded as an artifact.
+
+## Why I built it this way
+
+I kept running `npm audit` on projects and getting a wall of advisories with no sense of which ones
+mattered, so the choice was fix everything (and break things) or ignore everything. The one question
+that actually changed my decision was "does our code even load this?" — so that became the core of the
+tool. The reachability check is deliberately simple: it looks for imports, not a call graph. I'd rather
+ship an honest "lower priority" signal than a clever one that quietly lies, so reachability only
+down-ranks findings, it never hides them. Keeping the tool dependency-free was a principle too — a thing
+that scans dependencies shouldn't drag in its own. The parts I'd tackle next are an OSV data source for
+other ecosystems and EPSS/KEV scoring so the ranking knows what's actually being exploited in the wild.
 
 ## Limits
 
