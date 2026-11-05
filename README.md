@@ -189,8 +189,9 @@ other ecosystems and EPSS/KEV scoring so the ranking knows what's actually being
   "lower priority", not "safe".
 - **npm only,** using `package-lock.json` v2 or v3. Other ecosystems aren't supported yet.
 - **Results reflect the advisory database at scan time.** Zero findings is not a security certification.
-- **Major upgrades are applied when no same-major fix exists,** and flagged. Your tests are the
-  safety net, so the tool's verdict is only as good as your test suite.
+- **Major upgrades are applied when no same-major fix exists,** and flagged. The scanned project's
+  own tests (`npm test`) are the safety net, so the verdict on an upgrade is only as good as that
+  project's test suite. If it has no tests, the upgrade is reported as unverified.
 
 ## Architecture
 
