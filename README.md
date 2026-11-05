@@ -234,4 +234,4 @@ action.yml                 reusable GitHub Action
 lab/vulnerable-app/        INTENTIONALLY VULNERABLE demo app
 ```
 
-Write-up: [dotrobin.dev/sca-remediation](https://dotrobin.dev/sca-remediation.html)
+Write-up: [dotrobin.dev/sca-triage](https://dotrobin.dev/sca-triage.html)
