@@ -1,7 +1,7 @@
 # sca-triage
 
 **Status: functional end-to-end npm SCA scanner and lab.**
-Its SAST companion, [sast-triage](https://github.com/lansiquo/sast-triage), reviews pull requests with Semgrep and is in development.
+Its SAST companion, [sast-triage](https://github.com/lansiquo/sast-triage), reviews pull requests with Semgrep, labels each finding new or pre-existing, and ranks it P1–P3 the same way.
 
 The implemented workflow scans npm dependencies, prioritizes findings using import evidence,
 applies proposed upgrades, runs the project’s tests, rescans and saves remediation evidence.
