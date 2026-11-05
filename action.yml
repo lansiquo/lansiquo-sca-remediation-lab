@@ -1,5 +1,5 @@
 name: sca-triage
-description: Fail the build on npm dependency vulnerabilities your code actually loads, ranked by severity and import-level reachability.
+description: "npm SCA scanner: fail the build on vulnerable dependencies your code actually loads, ranked by severity and reachability."
 branding:
   icon: shield
   color: red
