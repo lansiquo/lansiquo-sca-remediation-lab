@@ -1,6 +1,6 @@
 # SCA Remediation Lab · `sca-triage`
 
-**Status: functional end-to-end local tool and lab.**
+**Status: functional end-to-end npm SCA scanner and lab.**
 
 The implemented workflow scans npm dependencies, prioritizes findings using import evidence,
 applies proposed upgrades, runs the project’s tests, rescans and saves remediation evidence.
@@ -15,9 +15,9 @@ from the working CLI and GitHub Action.
 > `axios`, `semver` and `tar` on purpose, so the tool has something real to find and fix.
 > Use it locally for learning only. Don't deploy it, don't expose it to a network, and don't
 > copy its dependency versions into real projects. Dependabot alerts on this repository are expected.
-> The `sca-triage` tool itself (`bin/` and `src/`) has no dependencies and is safe to use.
+> The `sca-triage` scanner itself (`bin/` and `src/`) has no dependencies and is safe to use.
 
-`sca-triage` is a dependency-free command-line tool and GitHub Action for npm projects. It finds
+`sca-triage` is a dependency-free npm SCA scanner, run from the command line or as a GitHub Action. It finds
 known vulnerabilities in your installed dependency tree, **ranks them by whether your code
 actually loads the vulnerable package**, applies the smallest safe upgrade, and proves the result
 with your own tests, with an evidence folder you can hand to an auditor.
