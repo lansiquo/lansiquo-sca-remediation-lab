@@ -1,7 +1,7 @@
 # sca-triage
 
 **Status: functional end-to-end npm SCA scanner and lab.**
-Its SAST companion, [sast-triage](https://github.com/lansiquo/Pull-Request-Reviewer), reviews pull requests with Semgrep and is in development.
+Its SAST companion, [sast-triage](https://github.com/lansiquo/sast-triage), reviews pull requests with Semgrep and is in development.
 
 The implemented workflow scans npm dependencies, prioritizes findings using import evidence,
 applies proposed upgrades, runs the project’s tests, rescans and saves remediation evidence.
@@ -43,8 +43,8 @@ what matters. `sca-triage` automates that triage:
 Requires Node.js 20 or newer and network access to `registry.npmjs.org`.
 
 ```bash
-git clone https://github.com/lansiquo/lansiquo-sca-remediation-lab.git
-cd lansiquo-sca-remediation-lab
+git clone https://github.com/lansiquo/sca-triage.git
+cd sca-triage
 npm run lab:install   # installs the INTENTIONALLY VULNERABLE lab app (no install scripts)
 npm run lab:scan      # rank the lab app's vulnerabilities
 npm run lab:plan      # show the smallest safe upgrades (dry run)
@@ -60,7 +60,7 @@ node bin/sca-triage.js fix /tmp/lab-copy --apply --evidence /tmp/lab-evidence
 On your own project:
 
 ```bash
-node /path/to/lansiquo-sca-remediation-lab/bin/sca-triage.js scan .
+node /path/to/sca-triage/bin/sca-triage.js scan .
 ```
 
 ## What it found in the lab (real output)
@@ -162,11 +162,13 @@ Reachability levels: `imported` (your runtime code requires or imports it), `via
   with:
     node-version: 22
 - run: npm ci --ignore-scripts
-- uses: lansiquo/lansiquo-sca-remediation-lab@main
+- uses: lansiquo/sca-triage@v1
   with:
     path: .
     fail-on: P1
 ```
+
+Pin `@v1` to get v1 fixes automatically, or pin a full commit SHA for the strictest supply-chain safety.
 
 The findings table is added to the job summary. This repository's own [CI](.github/workflows/ci.yml)
 runs the tool against the lab app on every push: the gate must **fail** on the vulnerable
