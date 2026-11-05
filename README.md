@@ -192,6 +192,34 @@ other ecosystems and EPSS/KEV scoring so the ranking knows what's actually being
 - **Major upgrades are applied when no same-major fix exists,** and flagged. Your tests are the
   safety net, so the tool's verdict is only as good as your test suite.
 
+## Architecture
+
+```text
+bin/sca-triage.js
+      |
+      v
+src/triage.js ------> src/lockfile.js
+      |               src/advisories.js
+      |               src/reachability.js
+      |               src/semver.js
+      v
+ranked findings (P1 / P2 / P3)
+      |
+      +------> src/fix.js       (fix --apply)
+      '------> src/report.js
+```
+
+`fix --apply` calls `triage.js` twice (before and after the upgrade) and uses `report.js` to write `REPORT.md`.
+
+- `bin/sca-triage.js` reads the command and flags, calls the modules below, prints the result and sets the exit code.
+- `src/triage.js` checks each installed package against its advisories, assigns P1/P2/P3 and picks the smallest safe upgrade.
+- `src/lockfile.js` reads `package.json` and `package-lock.json` into a list of installed packages and who depends on each.
+- `src/advisories.js` asks the npm registry for known advisories and published versions.
+- `src/reachability.js` finds the packages your source files `require` or `import`.
+- `src/semver.js` compares versions and matches the version ranges advisories use.
+- `src/fix.js` applies the upgrades with npm, runs your tests, rescans and writes the evidence folder.
+- `src/report.js` formats results as the terminal table and the Markdown report.
+
 ## Layout
 
 ```text
